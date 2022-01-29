@@ -1,0 +1,76 @@
+\\#!/bin/bash -ex
+WEBROOT=/var/www/processwire
+NAME=processwire
+DB_PASS=$(mcookie)
+
+PHP_V=7.4
+
+ADMIN_USER=admin
+ADMIN_PASS=turnkey
+ADMIN_MAIL=admin@example.com
+
+PW_PROFILE=site-beginner
+
+# set proxy settings
+[ "$FAB_HTTP_PROXY" ] && export HTTP_PROXY=$FAB_HTTP_PROXY
+
+# increase php cli memory limit - for composer install.
+sed -i "s|^memory_limit.*|memory_limit = 768M|" /etc/php/${PHP_V}/cli/php.ini
+
+# increase php Apache running limits
+PHPINI=/etc/php/${PHP_V}/apache2/php.ini
+sed -i "s|^memory_limit.*|memory_limit = 128M|" $PHPINI
+sed -i "s|^upload_max_filesize.*|upload_max_filesize = 16M|" $PHPINI
+sed -i "s|^post_max_size.*|post_max_size = 48M|" $PHPINI
+
+export HTTPS_PROXY_REQUEST_FULLURI=false # work around composer not working behind proxy
+export COMPOSER_MEMORY_LIMIT=-1 # temporarily disable composer memory limits during install
+
+
+# install processwire
+mkdir -p $WEBROOT
+chown www-data:www-data $WEBROOT
+turnkey-composer create-project processwire/processwire $WEBROOT --no-dev --no-interaction
+
+# change directory permissions
+chown -R www-data:www-data $WEBROOT
+
+
+# create the database and user
+service mysql start
+mysqladmin create $NAME
+mysql --batch --execute "grant all privileges on $NAME.* to $NAME@localhost identified by '$DB_PASS'; flush privileges;"
+
+# configure apache
+a2dissite 000-default
+a2ensite processwire
+a2enmod rewrite
+
+# perform installation
+/etc/init.d/apache2 start
+
+URL="http://127.0.0.1/install.php"
+CURL="curl -c /tmp/cookie -b /tmp/cookie"
+
+EMAIL=$(echo $ADMIN_MAIL | sed s/@/%40/)
+#SEC=$($CURL -s $URL |grep value=\"1\"|awk {'print $3'}|sed 's|\"||g'|sed 's|name=||')
+
+curl ${URL} --data "step=0"
+curl ${URL} --data "profile=$PW_PROFILE&step=0"
+curl ${URL} --data "step=2"
+curl ${URL} --data "dbName=$NAME&dbUser=$NAME&dbPass=$DB_PASS&dbHost=localhost&dbPort=3306&dbCharset=utf8&dbEngine=InnoDB&timezone=424&chmodDir=755&chmodFile=644&httpHosts=&debugMode=0&step=4"
+curl ${URL} --data "admin_name=$ADMIN_USER&username=$ADMIN_USER&userpass=$ADMIN_PASS&userpass_confirm=$ADMIN_PASS&useremail=$EMAIL&remove_items%5B%5D=install-php&remove_items%5B%5D=install-dir&remove_items%5B%5D=gitignore&remove_items%5B%5D=site-default&remove_items%5B%5D=site-languages&remove_items%5B%5D=site-blank&remove_items%5B%5D=site-classic&remove_items%5B%5D=site-regular&step=5"
+
+
+#update configuration
+cat <<EOT >> ${WEBROOT}/site/config.php
+/**
+ * Server locale setting
+ *
+ */
+setlocale(LC_ALL,'en_US.UTF-8');
+EOT
+
+#Secure webroot
+find $WEBROOT -type d -exec chmod 755 {} \;
+find $WEBROOT -type f -exec chmod 644 {} \;
