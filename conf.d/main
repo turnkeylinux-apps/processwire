@@ -1,4 +1,4 @@
-\\#!/bin/bash -ex
+#!/bin/bash -ex
 WEBROOT=/var/www/processwire
 NAME=processwire
 DB_PASS=$(mcookie)

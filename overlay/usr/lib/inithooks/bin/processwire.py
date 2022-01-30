@@ -12,8 +12,6 @@ import hashlib
 import subprocess
 
 from libinithooks.dialog_wrapper import Dialog
-from mysqlconf import MySQL
-
 
 def usage(s=None):
     if s:
@@ -54,10 +52,7 @@ def main():
             "Please enter email address for the ProcessWire 'admin' account.",
             "admin@example.com")
 
-    m = MySQL()
-    m.execute('UPDATE processwire.field_email SET data=\"%s\" WHERE data=\"admin@example.com\";' % email)
-
-    subprocess.call(["/usr/lib/inithooks/bin/pwBootstrap.sh", password])
+    subprocess.call(["/usr/lib/inithooks/bin/pwBootstrap.sh", password, email])
 
 if __name__ == "__main__":
     main()
