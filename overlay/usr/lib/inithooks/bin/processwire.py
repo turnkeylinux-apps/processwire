@@ -52,7 +52,7 @@ def main():
             "Please enter email address for the ProcessWire 'admin' account.",
             "admin@example.com")
 
-    subprocess.call(["/usr/lib/inithooks/bin/pwBootstrap.sh", password, email])
+    subprocess.call(["/usr/lib/inithooks/bin/pwBootstrap.php", password, email])
 
 if __name__ == "__main__":
     main()
