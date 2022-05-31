@@ -46,8 +46,14 @@ a2dissite 000-default
 a2ensite processwire
 a2enmod rewrite
 
+cd /usr/local/src
+unzip site-beginner.zip -d "$WEBROOT"
+rm site-beginner.zip
+mv "$WEBROOT/site-beginner"{-main,}
+chown -R www-data:www-data "$WEBROOT/site-beginner"
+
 # perform installation
-/etc/init.d/apache2 start
+service apache2 start
 
 URL="http://127.0.0.1/install.php"
 CURL="curl -c /tmp/cookie -b /tmp/cookie"
@@ -74,3 +80,6 @@ EOT
 #Secure webroot
 find $WEBROOT -type d -exec chmod 755 {} \;
 find $WEBROOT -type f -exec chmod 644 {} \;
+
+service mysql stop
+service apache2 stop
