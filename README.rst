@@ -1,5 +1,5 @@
 ProcessWire - Content Management System
-+++====================================
+=======================================
 
 `ProcessWire`_ is a free content management system (CMS) and framework (CMF) 
 built to save you time and work the way you do. With all custom fields, 
