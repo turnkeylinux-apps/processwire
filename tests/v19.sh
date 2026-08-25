@@ -61,7 +61,7 @@ apache_version=$(dpkg-query -W -f='${Version}' apache2)
 mariadb_version=$(dpkg-query -W -f='${Version}' mariadb-server)
 
 curl --insecure --fail --silent --show-error "$base/" >"$page"
-grep -Fq 'Beginner' "$page"
+grep -Fq 'What is ProcessWire?' "$page"
 curl --insecure --fail --silent --show-error \
     --cookie-jar "$cookie" "$admin" >"$page"
 grep -Fq 'ProcessWire' "$page"
