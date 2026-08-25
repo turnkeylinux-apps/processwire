@@ -1,9 +1,31 @@
 #!/bin/bash -ex
 
-dl() {
-    [ "$FAB_HTTP_PROXY" ] && PROXY="--proxy $FAB_HTTP_PROXY"
-    cd $2; curl -L -f $PROXY $1 > $3; cd -
-}
+VERSION=3.0.258
+COMMIT=6b28a805c07d3b0509b53ce6632c03834fe38964
+SHA256=c073b4c44dcce711883cfa73b2d5b079f3547c9d810ab88f4ca657bb3d53adaf
+PROFILE_COMMIT=4e6cfd1f16c6aa926effaebd6bab25a44367d2bd
+PROFILE_SHA256=99b850c2d3db949e75ca014cd85cca66d35dfab2bcca415bf702ecd567e6733f
+SRC=/usr/local/src
+ARCHIVE="$SRC/processwire-$VERSION.zip"
+PROFILE_ARCHIVE="$SRC/site-beginner.zip"
+URL="https://github.com/processwire/processwire/archive/$COMMIT.zip"
+PROFILE_URL="https://github.com/processwire/site-beginner/archive/$PROFILE_COMMIT.zip"
 
-URL="https://github.com/processwire/site-beginner/archive/refs/heads/main.zip"
-dl $URL /usr/local/src site-beginner.zip
+proxy=()
+[[ -z ${FAB_HTTP_PROXY:-} ]] || proxy=(--proxy "$FAB_HTTP_PROXY")
+
+curl --fail --location --show-error "${proxy[@]}" --output "$ARCHIVE" "$URL"
+echo "$SHA256  $ARCHIVE" | sha256sum --check --strict
+curl --fail --location --show-error "${proxy[@]}" \
+    --output "$PROFILE_ARCHIVE" "$PROFILE_URL"
+echo "$PROFILE_SHA256  $PROFILE_ARCHIVE" | sha256sum --check --strict
+
+cat >"$SRC/processwire-release" <<EOF
+PROCESSWIRE_VERSION=$VERSION
+PROCESSWIRE_COMMIT=$COMMIT
+PROCESSWIRE_SOURCE_URL=$URL
+PROCESSWIRE_SOURCE_SHA256=$SHA256
+PROCESSWIRE_PROFILE_COMMIT=$PROFILE_COMMIT
+PROCESSWIRE_PROFILE_URL=$PROFILE_URL
+PROCESSWIRE_PROFILE_SHA256=$PROFILE_SHA256
+EOF

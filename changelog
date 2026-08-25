@@ -1,3 +1,16 @@
+turnkey-processwire-19.0 (1) turnkey; urgency=low
+
+  * Install ProcessWire 3.0.258 and the beginner site profile from
+    integrity-pinned official upstream archives.
+
+  * Add a supervised ProcessWire core update command with a non-destructive
+    stable-channel check.
+
+  * Upgrade the base distribution to Debian 13/Trixie with PHP 8.4 and
+    MariaDB from signed Debian repositories.
+
+ -- TurnKey Linux release engineering <release@turnkeylinux.org>  Tue, 25 Aug 2026 00:00:00 +0000
+
 turnkey-processwire-18.0 (1) turnkey; urgency=low
 
   * Install latest version of processwire: 3.0.227.
