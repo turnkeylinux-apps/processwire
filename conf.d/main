@@ -59,16 +59,31 @@ chown -R www-data:www-data "$WEBROOT/site-beginner"
 service apache2 start
 
 URL="http://127.0.0.1/install.php"
-CURL="curl -c /tmp/cookie -b /tmp/cookie"
+COOKIE=/tmp/processwire-install-cookie
+PAGE=/tmp/processwire-install-page
+
+curl --fail --silent --show-error --cookie-jar "$COOKIE" "$URL" >"$PAGE"
+INSTALL_TOKEN=$(sed -n \
+    "s/.*name='install_token' value='\([^']*\)'.*/\1/p" \
+    "$PAGE" | head -1)
+test -n "$INSTALL_TOKEN"
+
+install_post() {
+    curl --fail --silent --show-error \
+        --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+        --data "$1" --data-urlencode "install_token=$INSTALL_TOKEN" \
+        "$URL" >"$PAGE"
+    ! grep -Fq 'Unable to continue' "$PAGE"
+}
 
 EMAIL=$(echo $ADMIN_MAIL | sed s/@/%40/)
-#SEC=$($CURL -s $URL |grep value=\"1\"|awk {'print $3'}|sed 's|\"||g'|sed 's|name=||')
 
-curl ${URL} --data "step=0"
-curl ${URL} --data "profile=$PW_PROFILE&step=0"
-curl ${URL} --data "step=2"
-curl ${URL} --data "dbName=$NAME&dbUser=$NAME&dbPass=$DB_PASS&dbHost=localhost&dbPort=3306&dbCharset=utf8&dbEngine=InnoDB&timezone=424&chmodDir=755&chmodFile=644&httpHosts=&debugMode=0&step=4"
-curl ${URL} --data "admin_name=$ADMIN_USER&username=$ADMIN_USER&userpass=$ADMIN_PASS&userpass_confirm=$ADMIN_PASS&useremail=$EMAIL&remove_items%5B%5D=install-php&remove_items%5B%5D=install-dir&remove_items%5B%5D=gitignore&remove_items%5B%5D=site-default&remove_items%5B%5D=site-languages&remove_items%5B%5D=site-blank&remove_items%5B%5D=site-classic&remove_items%5B%5D=site-regular&step=5"
+install_post "step=0"
+install_post "profile=$PW_PROFILE&step=0"
+install_post "step=2"
+install_post "dbName=$NAME&dbUser=$NAME&dbPass=$DB_PASS&dbHost=localhost&dbPort=3306&dbCharset=utf8&dbEngine=InnoDB&timezone=424&chmodDir=755&chmodFile=644&httpHosts=&debugMode=0&step=4"
+install_post "admin_name=$ADMIN_USER&username=$ADMIN_USER&userpass=$ADMIN_PASS&userpass_confirm=$ADMIN_PASS&useremail=$EMAIL&remove_items%5B%5D=install-php&remove_items%5B%5D=install-dir&remove_items%5B%5D=gitignore&remove_items%5B%5D=site-default&remove_items%5B%5D=site-languages&remove_items%5B%5D=site-blank&remove_items%5B%5D=site-classic&remove_items%5B%5D=site-regular&step=5"
+rm -f "$COOKIE" "$PAGE"
 
 # update configuration
 cat <<EOT >> ${WEBROOT}/site/config.php
