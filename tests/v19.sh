@@ -54,7 +54,7 @@ test "$installed" = "$PROCESSWIRE_VERSION"
 
 php_version=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
 test "$php_version" = 8.4
-for module in curl gd mysqli pdo_mysql zip; do
+for module in gd mysqli pdo_mysql zip; do
     php -m | grep -Fxiq "$module"
 done
 apache_version=$(dpkg-query -W -f='${Version}' apache2)
