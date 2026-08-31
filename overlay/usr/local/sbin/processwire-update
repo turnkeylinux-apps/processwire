@@ -1,0 +1,122 @@
+#!/bin/bash
+set -Eeuo pipefail
+umask 077
+
+webroot=${PROCESSWIRE_ROOT:-/var/www/processwire}
+metadata_url=https://repo.packagist.org/p2/processwire/processwire.json
+
+usage() {
+    echo "Usage: processwire-update --check" >&2
+    echo "       processwire-update VERSION SHA256" >&2
+    exit 2
+}
+
+if [[ ${1:-} != --check && $# -ne 2 ]]; then
+    usage
+fi
+
+if [[ ${1:-} != --check ]]; then
+    [[ $1 =~ ^3\.0\.[0-9]+$ ]] || usage
+    [[ $2 =~ ^[0-9a-f]{64}$ ]] || usage
+    [[ $EUID -eq 0 ]] || {
+        echo "ProcessWire updates must run as root" >&2
+        exit 1
+    }
+fi
+
+tmpdir=$(mktemp -d)
+cleanup() {
+    rm -rf -- "$tmpdir"
+}
+trap cleanup EXIT
+
+curl --fail --silent --show-error --location \
+    --output "$tmpdir/releases.json" "$metadata_url"
+
+readarray -t release < <(python3 - "$tmpdir/releases.json" "${1:-}" <<'PYTHON'
+import json
+import re
+import sys
+
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+requested = sys.argv[2]
+releases = data["packages"]["processwire/processwire"]
+stable = [item for item in releases if re.fullmatch(r"3\.0\.\d+", item["version"])]
+assert stable, "official stable ProcessWire channel is empty"
+item = stable[0] if requested == "--check" else next(
+    item for item in stable if item["version"] == requested
+)
+source = item["source"]
+dist = item["dist"]
+assert source["url"] == "https://github.com/processwire/processwire.git"
+assert re.fullmatch(r"[0-9a-f]{40}", source["reference"])
+assert dist["reference"] == source["reference"]
+assert dist["url"].startswith(
+    "https://api.github.com/repos/processwire/processwire/zipball/"
+)
+print(item["version"])
+print(source["reference"])
+PYTHON
+)
+
+latest=${release[0]}
+commit=${release[1]}
+installed=$(php -r '
+require $argv[1];
+echo ProcessWire\ProcessWire::versionMajor, ".",
+     ProcessWire\ProcessWire::versionMinor, ".",
+     ProcessWire\ProcessWire::versionRevision;
+' "$webroot/wire/core/ProcessWire.php")
+
+if [[ ${1:-} == --check ]]; then
+    printf 'installed=%s latest=%s channel=official-stable commit=%s\n' \
+        "$installed" "$latest" "$commit"
+    exit 0
+fi
+
+version=$1
+expected_sha256=$2
+if [[ $version == "$installed" ]]; then
+    echo "ProcessWire $version is already installed"
+    exit 0
+fi
+
+archive="$tmpdir/processwire-$version.zip"
+source_url="https://github.com/processwire/processwire/archive/$commit.zip"
+curl --fail --silent --show-error --location --output "$archive" "$source_url"
+echo "$expected_sha256  $archive" | sha256sum --check --strict
+unzip -q "$archive" -d "$tmpdir/source"
+source_root="$tmpdir/source/processwire-$commit"
+test -d "$source_root/wire/core"
+
+downloaded=$(php -r '
+require $argv[1];
+echo ProcessWire\ProcessWire::versionMajor, ".",
+     ProcessWire\ProcessWire::versionMinor, ".",
+     ProcessWire\ProcessWire::versionRevision;
+' "$source_root/wire/core/ProcessWire.php")
+test "$downloaded" = "$version"
+
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+backup=/var/backups/processwire/$stamp-$installed
+install -d -m 0700 "$backup"
+mariadb-dump processwire | gzip -9 >"$backup/processwire.sql.gz"
+tar -C "$webroot" -czf "$backup/core.tar.gz" wire index.php htaccess.txt
+
+mv "$webroot/wire" "$webroot/wire.previous"
+mv "$source_root/wire" "$webroot/wire"
+cp "$source_root/index.php" "$source_root/htaccess.txt" "$webroot/"
+chown -R www-data:www-data "$webroot/wire" "$webroot/index.php" \
+    "$webroot/htaccess.txt"
+curl --insecure --fail --silent --show-error \
+    https://127.0.0.1/admin/ >/dev/null
+rm -rf "$webroot/wire.previous"
+
+cat > /usr/local/share/processwire-release <<EOF
+PROCESSWIRE_VERSION=$version
+PROCESSWIRE_COMMIT=$commit
+PROCESSWIRE_SOURCE_URL=$source_url
+PROCESSWIRE_SOURCE_SHA256=$expected_sha256
+EOF
+chmod 0644 /usr/local/share/processwire-release
+echo "Updated ProcessWire from $installed to $version; backup: $backup"

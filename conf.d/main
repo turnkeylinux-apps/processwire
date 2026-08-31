@@ -2,6 +2,7 @@
 WEBROOT=/var/www/processwire
 NAME=processwire
 DB_PASS=$(mcookie)
+SRC=/usr/local/src
 
 ADMIN_USER=admin
 ADMIN_PASS=turnkey
@@ -21,13 +22,14 @@ sed -i "s|^memory_limit.*|memory_limit = 128M|" $PHPINI
 sed -i "s|^upload_max_filesize.*|upload_max_filesize = 16M|" $PHPINI
 sed -i "s|^post_max_size.*|post_max_size = 48M|" $PHPINI
 
-export HTTPS_PROXY_REQUEST_FULLURI=false # work around composer not working behind proxy
-export COMPOSER_MEMORY_LIMIT=-1 # temporarily disable composer memory limits during install
-
-# install processwire
-mkdir -p $WEBROOT
-chown www-data:www-data $WEBROOT
-turnkey-composer create-project processwire/processwire $WEBROOT --no-dev --no-interaction
+# install the integrity-pinned official ProcessWire release
+# shellcheck disable=SC1091
+. "$SRC/processwire-release"
+unzip "$SRC/processwire-$PROCESSWIRE_VERSION.zip" -d "$SRC"
+mv "$SRC/processwire-$PROCESSWIRE_COMMIT" "$WEBROOT"
+rm "$SRC/processwire-$PROCESSWIRE_VERSION.zip"
+install -D -m 0644 "$SRC/processwire-release" \
+    /usr/local/share/processwire-release
 
 # change directory permissions
 chown -R www-data:www-data $WEBROOT
@@ -35,7 +37,11 @@ chown -R www-data:www-data $WEBROOT
 # create the database and user
 service mysql start
 mysqladmin create $NAME
-mysql --batch --execute "grant all privileges on $NAME.* to $NAME@localhost identified by '$DB_PASS'; flush privileges;"
+mysql --batch <<EOF
+CREATE USER '$NAME'@'localhost' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON $NAME.* TO '$NAME'@'localhost';
+FLUSH PRIVILEGES;
+EOF
 
 # configure apache
 a2dissite 000-default
@@ -45,23 +51,39 @@ a2enmod rewrite
 cd /usr/local/src
 unzip site-beginner.zip -d "$WEBROOT"
 rm site-beginner.zip
-mv "$WEBROOT/site-beginner"{-main,}
+mv "$WEBROOT/site-beginner-$PROCESSWIRE_PROFILE_COMMIT" \
+    "$WEBROOT/site-beginner"
 chown -R www-data:www-data "$WEBROOT/site-beginner"
 
 # perform installation
 service apache2 start
 
 URL="http://127.0.0.1/install.php"
-CURL="curl -c /tmp/cookie -b /tmp/cookie"
+COOKIE=/tmp/processwire-install-cookie
+PAGE=/tmp/processwire-install-page
+
+curl --fail --silent --show-error --cookie-jar "$COOKIE" "$URL" >"$PAGE"
+INSTALL_TOKEN=$(sed -n \
+    "s/.*name='install_token' value='\([^']*\)'.*/\1/p" \
+    "$PAGE" | head -1)
+test -n "$INSTALL_TOKEN"
+
+install_post() {
+    curl --fail --silent --show-error \
+        --cookie "$COOKIE" --cookie-jar "$COOKIE" \
+        --data "$1" --data-urlencode "install_token=$INSTALL_TOKEN" \
+        "$URL" >"$PAGE"
+    ! grep -Fq 'Unable to continue' "$PAGE"
+}
 
 EMAIL=$(echo $ADMIN_MAIL | sed s/@/%40/)
-#SEC=$($CURL -s $URL |grep value=\"1\"|awk {'print $3'}|sed 's|\"||g'|sed 's|name=||')
 
-curl ${URL} --data "step=0"
-curl ${URL} --data "profile=$PW_PROFILE&step=0"
-curl ${URL} --data "step=2"
-curl ${URL} --data "dbName=$NAME&dbUser=$NAME&dbPass=$DB_PASS&dbHost=localhost&dbPort=3306&dbCharset=utf8&dbEngine=InnoDB&timezone=424&chmodDir=755&chmodFile=644&httpHosts=&debugMode=0&step=4"
-curl ${URL} --data "admin_name=$ADMIN_USER&username=$ADMIN_USER&userpass=$ADMIN_PASS&userpass_confirm=$ADMIN_PASS&useremail=$EMAIL&remove_items%5B%5D=install-php&remove_items%5B%5D=install-dir&remove_items%5B%5D=gitignore&remove_items%5B%5D=site-default&remove_items%5B%5D=site-languages&remove_items%5B%5D=site-blank&remove_items%5B%5D=site-classic&remove_items%5B%5D=site-regular&step=5"
+install_post "step=0"
+install_post "profile=$PW_PROFILE&step=0"
+install_post "step=2"
+install_post "dbName=$NAME&dbUser=$NAME&dbPass=$DB_PASS&dbHost=localhost&dbPort=3306&dbCharset=utf8&dbEngine=InnoDB&timezone=424&chmodDir=755&chmodFile=644&httpHosts=&debugMode=0&step=4"
+install_post "admin_name=$ADMIN_USER&username=$ADMIN_USER&userpass=$ADMIN_PASS&userpass_confirm=$ADMIN_PASS&useremail=$EMAIL&remove_items%5B%5D=install-php&remove_items%5B%5D=install-dir&remove_items%5B%5D=gitignore&remove_items%5B%5D=site-default&remove_items%5B%5D=site-languages&remove_items%5B%5D=site-blank&remove_items%5B%5D=site-classic&remove_items%5B%5D=site-regular&step=5"
+rm -f "$COOKIE" "$PAGE"
 
 # update configuration
 cat <<EOT >> ${WEBROOT}/site/config.php

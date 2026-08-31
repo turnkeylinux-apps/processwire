@@ -13,11 +13,13 @@ and on top of that:
 
 - ProcessWire configurations:
    
-   - Installed (using composer_) from upstream source code to /var/www/processwire
+   - Installed from integrity-pinned official upstream source in
+     ``/var/www/processwire``.
    - Uploading of media such as images, videos, etc.
    - **Security note**: Major updates to ProcessWire may require
      supervision so they **ARE NOT** configured to install automatically.
-     See `ProcessWire update docs` for more detail on upgrading.
+     Run ``processwire-update --check`` to inspect the official stable channel,
+     then see `ProcessWire update docs` for the supervised upgrade procedure.
                
 - SSL support out of the box.
 - `Adminer`_ administration frontend for MySQL (listening on port
@@ -37,7 +39,6 @@ Credentials *(passwords set at first boot)*
 
 .. _ProcessWire: https://www.processwire.com
 .. _TurnKey Core: https://www.turnkeylinux.org/core
-.. _composer: https://getcomposer.org
 .. _third party ProcessWire modules: https://www.processwire.com/modules/
 .. _ProcessWire update docs: https://processwire.com/docs/start/install/upgrade/
 .. _Adminer: https://www.adminer.org/
